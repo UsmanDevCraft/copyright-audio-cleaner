@@ -1,69 +1,150 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { processAudioFile } from "@/src/lib/audioProcessor";
+import { convertWavToMp3 } from "@/src/lib/ffmpeg";
 
 export default function Home() {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [statusMessage, setStatusMessage] = useState<string>(
+    "Select an audio file to begin...",
+  );
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [cleanedFileName, setCleanedFileName] = useState<string>("");
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setSelectedFile(file);
+    if (file) {
+      setStatusMessage(`Loaded: ${file.name}`);
+      setDownloadUrl(null);
+    }
+  };
+
+  const handleProcessAudio = async () => {
+    if (!selectedFile) return;
+
+    try {
+      setIsProcessing(true);
+
+      // Step 1: Web Audio API DSP Shift
+      setStatusMessage("Step 1/2: Applying DSP pitch & tempo micro-shifts...");
+      const { wavBlob, originalName } = await processAudioFile(selectedFile, {
+        detuneCents: -10,
+        tempoMultiplier: 1.008,
+      });
+
+      // Step 2: FFmpeg WASM Compression
+      setStatusMessage(
+        "Step 2/2: Compressing to 320 kbps MP3 & stripping metadata...",
+      );
+      const mp3Blob = await convertWavToMp3(wavBlob);
+
+      const url = URL.createObjectURL(mp3Blob);
+      const cleanName = `cleaned_${originalName.replace(/\.[^/.]+$/, "")}.mp3`;
+
+      setDownloadUrl(url);
+      setCleanedFileName(cleanName);
+      setStatusMessage("Processing complete! Clean MP3 ready (~3-4 MB).");
+    } catch (err) {
+      console.error(err);
+      setStatusMessage(
+        "Error processing audio file. Make sure your browser supports WebAssembly.",
+      );
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main
+      style={{
+        minHeight: "100vh",
+        backgroundColor: "#0f172a",
+        color: "#f8fafc",
+        padding: "3rem",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: "#1e293b",
+          padding: "2rem",
+          borderRadius: "12px",
+          width: "100%",
+          maxWidth: "480px",
+          boxShadow: "0 10px 25px rgba(0,0,0,0.5)",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: "1.5rem",
+            fontWeight: "bold",
+            marginBottom: "0.5rem",
+          }}
+        >
+          Audio Cleaner (DSP + WASM)
+        </h1>
+        <p
+          style={{
+            color: "#94a3b8",
+            fontSize: "0.9rem",
+            marginBottom: "1.5rem",
+          }}
+        >
+          Shift fingerprints and export clean, lightweight 320kbps MP3s.
+        </p>
+
+        <input
+          type="file"
+          accept="audio/*"
+          onChange={handleFileChange}
+          style={{ marginBottom: "1rem", display: "block", width: "100%" }}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
+
+        <button
+          onClick={handleProcessAudio}
+          disabled={!selectedFile || isProcessing}
+          style={{
+            backgroundColor:
+              !selectedFile || isProcessing ? "#475569" : "#3b82f6",
+            color: "white",
+            border: "none",
+            padding: "0.75rem 1.5rem",
+            borderRadius: "6px",
+            fontWeight: "bold",
+            cursor: !selectedFile || isProcessing ? "not-allowed" : "pointer",
+            width: "100%",
+          }}
+        >
+          {isProcessing ? "Processing..." : "Clean Audio"}
+        </button>
+
+        <p
+          style={{ marginTop: "1rem", fontSize: "0.875rem", color: "#38bdf8" }}
+        >
+          {statusMessage}
+        </p>
+
+        {downloadUrl && (
           <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            href={downloadUrl}
+            download={cleanedFileName}
+            style={{
+              display: "block",
+              marginTop: "1rem",
+              color: "#4ade80",
+              fontWeight: "bold",
+              textDecoration: "none",
+            }}
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
+            Download Cleaned MP3 (.mp3)
           </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        )}
+      </div>
+    </main>
   );
 }
